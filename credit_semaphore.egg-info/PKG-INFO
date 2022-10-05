@@ -1,0 +1,6 @@
+Metadata-Version: 2.1
+Name: credit-semaphore
+Version: 0.0.4
+Summary: Asynchronous Semaphore Based on Credits for Efficient Credit-Based API Throttling
+Author: HangukQuant
+Author-email: 
