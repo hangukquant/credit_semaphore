@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     name='credit_semaphore',
-    version='0.0.4',
+    version='0.0.5',
     description='Asynchronous Semaphore Based on Credits for Efficient Credit-Based API Throttling',
     author='HangukQuant',
     install_requires=[

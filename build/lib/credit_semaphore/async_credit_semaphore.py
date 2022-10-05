@@ -5,7 +5,7 @@ import collections
 class CancelledError(BaseException):
     pass
 
-class CreditSemaphore():
+class AsyncCreditSemaphore():
     def __init__(self, credits=1):
         if credits < 0:
             raise ValueError("Semaphore credit value must be >= 0")
