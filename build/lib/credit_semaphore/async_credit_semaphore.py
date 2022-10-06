@@ -2,9 +2,6 @@ import asyncio
 import functools
 import collections
 
-class CancelledError(BaseException):
-    pass
-
 class AsyncCreditSemaphore():
     def __init__(self, credits=1):
         if credits < 0:
@@ -19,19 +16,34 @@ class AsyncCreditSemaphore():
         return f"has credits {self._credits} and waiter count of {0 if not self._waiters else len(self._waiters)}."
 
     async def transact(self, coroutine, credits, refund_time, transaction_id=None, verbose=False):
-        if verbose: print(f"TXN {transaction_id} acquiring CreditSemaphore")
+        assert(asyncio.iscoroutine(coroutine))
+        
+        if verbose: 
+            print(f"TXN {transaction_id} acquiring CreditSemaphore")
         await self.acquire(credits, refund_time)
-        if verbose: print(f'TXN {transaction_id} entered CreditSemaphore...')
-        result = await coroutine
-        self.refund_later(credits, refund_time)
-        if verbose: print(f'TXN {transaction_id} exits CreditSemaphore, schedule refund in {refund_time}...')
+
+        if verbose: 
+            print(f'TXN {transaction_id} entered CreditSemaphore...')
+        try:
+            result = await coroutine
+        except Exception as err:
+            raise err
+        finally:
+            self.refund_later(credits, refund_time)
+        
+        if verbose: 
+            print(f'TXN {transaction_id} exits CreditSemaphore, schedule refund in {refund_time}...')
         return result
 
     def refund_later(self, credits, after_time):
-        asyncio.get_running_loop().call_later(
-            after_time,
-            functools.partial(self.release, credits)
-        )
+        assert(after_time >= 0)
+        if after_time == 0:
+            self.release(credits)
+        else:
+            asyncio.get_running_loop().call_later(
+                after_time,
+                functools.partial(self.release, credits)
+            )
         return
 
     def locked(self, require_credits):
@@ -59,7 +71,7 @@ class AsyncCreditSemaphore():
                 del self._future_refunds[fut]
                 self._waiters.remove(fut)
 
-        except CancelledError as err:
+        except Exception as err:
             if not fut.cancelled():
                 self.refund_later(self._future_costs[fut], self._future_refunds[fut])
                 del self._future_costs[fut]
