@@ -19,8 +19,6 @@ class AsyncCreditSemaphore():
         return f"has credits {self._credits} and waiter count of {0 if not self._waiters else len(self._waiters)}."
 
     async def transact(self, coroutine, credits, refund_time, transaction_id=None, verbose=False):
-        assert(asyncio.iscoroutinefunction(coroutine))
-        
         if verbose: print(f"TXN {transaction_id} acquiring CreditSemaphore")
         await self.acquire(credits, refund_time)
         if verbose: print(f'TXN {transaction_id} entered CreditSemaphore...')
