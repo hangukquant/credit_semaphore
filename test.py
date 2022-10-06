@@ -4,9 +4,28 @@ import asyncio
 from credit_semaphore.async_credit_semaphore import AsyncCreditSemaphore
 
 
-async def do_test(sem):
-    task = asyncio.create_task(asyncio.sleep(3))
-    await sem.transact(task, credits, 3)
+async def failure():
+    await asyncio.sleep(3)
+    raise Exception("i am a failure")
+
+async def do_test():
+    sem = AsyncCreditSemaphore(10)
+    print("state 1", sem)
+    try:
+        await sem.transact(failure(), 4, 0)
+    except Exception as err:
+        print(err)
+    print("state 2", sem)
+    try:
+        await sem.transact(failure(), 4, 0)
+    except Exception as err:
+        print(err)
+    print("state 3", sem)
+    try:
+        await sem.transact(failure(), 4, 0)
+    except Exception as err:
+        print(err)
+
 
 
 async def tasks_are_not_coroutines():
@@ -28,6 +47,6 @@ async def tasks_are_not_coroutines():
 
 
 if __name__ == "__main__":
-    async_credit_sem = AsyncCreditSemaphore(10)
-    asyncio.run(do_test(async_credit_sem))
+    #async_credit_sem = AsyncCreditSemaphore(10)
+    asyncio.run(do_test())
     asyncio.run(tasks_are_not_coroutines())  
