@@ -36,7 +36,7 @@ Suppose we have a financial API endpoint that has rate limits as such:
 |------------|-----------------------|
 | 10 seconds | 40                  |
 
-The API gives us 40 credits to use every 10 seconds (capped at 50 credits max).
+The API gives us 40 credits to use every 10 seconds (capped at 40 credits max).
 Different endpoints can have variable credit costs, depending on the server load. 
 
 Suppose we have the following endpoints and their respective costs:
