@@ -155,3 +155,77 @@ TXN 6 exits CreditSemaphore, schedule refund in 10...
 2022-10-08 10:52:16.872035::getTick processed 5
 TXN 5 exits CreditSemaphore, schedule refund in 10...
 ```
+
+Cleaner Usage
+-----
+Convenience functions are written for possible usage in service class wrappers that are responsible for interfacing with the external API. We allow this access with the decorator `@consume_credits`, which take the parameters
+
+- costs: same as before
+- refund_in: same as before 
+- attrname: (str) the variable name of the credit semaphore object, defaults to `credit_semaphore' 
+- verbose: (bool) defaults to True, same as before
+- timeout: to deal with the scenario where a costly transaction sits behind multiple cheap transactions rapidly being submitted to the semaphore, we can optionally add a timeout to our transaction, which raises `asyncio.TimeoutError` if our transaction takes too long to complete. Can also be used to timeout unstable network requests which are not responsive and hangs. Defaults to 0 (no timeout).
+
+#### Sample
+```python
+import asyncio
+
+from datetime import datetime
+
+from credit_semaphore.semutils import consume_credits
+from credit_semaphore.async_credit_semaphore import AsyncCreditSemaphore
+
+class DbService():
+
+    def __init__(self):
+        self.mysem = AsyncCreditSemaphore(40)
+        self.anothersem = AsyncCreditSemaphore(40)
+
+    #uses credit semaphore mysem
+    @consume_credits(costs=20, refund_in=10, attrname="mysem")
+    async def getTick(self, work, id):
+        print(f"{datetime.now()}::getTick processing {id} takes {work} seconds")
+        await asyncio.sleep(work)
+        print(f"{datetime.now()}::getTick processed {id}")
+        return True
+
+    #uses a different credit semaphore
+    @consume_credits(costs=30, refund_in=10, timeout=60, attrname="anothersem")
+    async def getOHLCV(self, work, id):
+        print(f"{datetime.now()}::getOHLCV processing {id} takes {work} seconds")
+        await asyncio.sleep(work)
+        print(f"{datetime.now()}::getOHLCV processed {id}")
+        return True
+
+    #this is not tracked by the semaphore!
+    async def getPrice(self, work, id):
+        print(f"{datetime.now()}::getPrice processing {id} takes {work} seconds")
+        await asyncio.sleep(work)
+        print(f"{datetime.now()}::getPrice processed {id}")
+        return True
+
+async def main():
+    tester = DbService()
+    transactions = [
+        tester.getOHLCV(work=1, id=1),
+        tester.getTick(work=4, id=2),
+        tester.getTick(work=1, id=3),
+        tester.getTick(work=5, id=4)
+    ]
+    results = await asyncio.gather(*transactions)
+
+    try:
+        transactions = [
+            tester.getOHLCV(work=61, id=1)
+        ]
+        results = await asyncio.gather(*transactions)
+
+    except asyncio.TimeoutError as err:
+        print(err)
+        print("third batch is terminated")
+        
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+## Happy Throttling!
