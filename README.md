@@ -230,7 +230,7 @@ if __name__ == "__main__":
 
 Technical Notes & Best Practices
 -----
-- Wrap unstable networks and expensive tasks in a timeout transaction. This is to prevent the coroutine from `await'-ing forever.
+- Wrap unstable networks and expensive tasks in a timeout transaction. This is to prevent the coroutine from 'await'-ing forever.
 
 - Since the transaction does not know when the coroutine actually performs the credit-costing request, the coroutine passed in to the `transact` function or decorated with the `@consume_credits` should be closest to the costful logic as possible. It should not perform heavy compute or multiple requests so that the credits can refunded as quickly as possible for efficiency. 
 
