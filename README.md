@@ -14,11 +14,11 @@ async def transact(self, coroutine, credits, refund_time, transaction_id=None, v
 ```
 The credit semaphore has a `transact` asynchronous function that takes in 3 key parameters
 
-- coroutine: the coroutine to run, for instance `asyncio.sleep(1)`.
-- credits: the number of credits (float or integer) the coroutine costs.
-- refund_time: the time in seconds it takes for the credits to be returned to the semaphore.
-- transaction_id (optional): this is an identifier for the transaction, and can be used with `verbose=True` for printing out when a particular transaction acquires and releases the semaphore.
-- verbose (optional): prints to terminal the transaction status when acquiring and releasing the semaphore.
+- `coroutine`: the coroutine to run, for instance `asyncio.sleep(1)`.
+- `credits`: the number of credits (float or integer) the coroutine costs.
+- `refund_time`: the time in seconds it takes for the credits to be returned to the semaphore.
+- `transaction_id` (optional): this is an identifier for the transaction, and can be used with `verbose=True` for printing out when a particular transaction acquires and releases the semaphore.
+- `verbose` (optional): prints to terminal the transaction status when acquiring and releasing the semaphore.
 
 Installing
 ----------
@@ -65,7 +65,7 @@ If a new transaction is submitted to the semaphore with enough credits to execut
 If there are multiple waiters in the semaphore, and multiple tasks have enough credits to execute, the first admitted transaction will be the earlier received transaction.
 
 #### Exit Behavior
-The transaction will exit the semaphore after the coroutine is completed. This is independent of the credit refunding, and if the transaction fails downstream, this will not affect the refund.
+The transaction will exit the semaphore after the coroutine is completed. This is independent of the credit refunding, which is performed later after `refund_time` seconds.
 
 #### Exception Behavior
 If the coroutine throws an `Exception`, we will assume the credit has already been consumed and will be refunded after `refund_time` seconds. The `Exception` is thrown back to the caller.
@@ -158,13 +158,13 @@ TXN 5 exits CreditSemaphore, schedule refund in 10...
 
 Cleaner Usage
 -----
-Convenience functions are written for possible usage in service class wrappers that are responsible for interfacing with the external API. We allow this access with the decorator `@consume_credits`, which take the parameters
+Convenience functions are written for possible usage in service class wrappers that are responsible for interfacing with some external API. We allow this access with the decorator `@consume_credits`, which take the parameters
 
-- costs: same as before
-- refund_in: same as before 
-- attrname: (str) the variable name of the credit semaphore object, defaults to `credit_semaphore' 
-- verbose: (bool) defaults to True, same as before
-- timeout: to deal with the scenario where a costly transaction sits behind multiple cheap transactions rapidly being submitted to the semaphore, we can optionally add a timeout to our transaction, which raises `asyncio.TimeoutError` if our transaction takes too long to complete. Can also be used to timeout unstable network requests which are not responsive and hangs. Defaults to 0 (no timeout).
+- `costs`: same as `credits`
+- `refund_in`: same as `refund_time` 
+- `attrname`: (str) the variable name of the credit semaphore object, defaults to `credit_semaphore' 
+- `verbose`: (bool) defaults to True, same as before
+- `timeout`: to deal with the scenario where a costly transaction sits behind multiple cheap transactions rapidly being submitted to the semaphore, we can optionally add a timeout to our transaction. This raises `asyncio.TimeoutError` if our transaction takes more than the specified number of seconds to complete. Can also be used to timeout unstable network requests which are not responsive and hangs. Defaults to 0 (no timeout).
 
 #### Sample
 ```python
@@ -222,20 +222,22 @@ async def main():
 
     except asyncio.TimeoutError as err:
         print(err)
-        print("third batch is terminated")
+        print("batch is terminated")
         
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Notes & Best Practices
+Technical Notes & Best Practices
 -----
 - Wrap unstable networks and expensive tasks in a timeout transaction. This is to prevent the coroutine from `await'-ing forever.
 
-- Since the transaction does not know when the coroutine actually performs the credit-costing request, the coroutine passed in to the `transact` function or decorated with the `@consume_credits` should be closest to the costful logic as possible. It should not perform heavy compute or multiple requests so that the credits can refunded as quickly as possible for efficiency. Functions that call credit consuming functions should not be decorated with `@consume_credits` to avoid double counting.
+- Since the transaction does not know when the coroutine actually performs the credit-costing request, the coroutine passed in to the `transact` function or decorated with the `@consume_credits` should be closest to the costful logic as possible. It should not perform heavy compute or multiple requests so that the credits can refunded as quickly as possible for efficiency. 
 
-- For a timeout transaction that does not get a chance to run due to it sitting behind other transactions that are opportunistically processed, a `RuntimeWarning: Enable tracemalloc to get the object allocation traceback` may be seen together with the `asyncio.TimeoutError`. This is because the transact contains the coroutine, and the transact is wrapped in an asyncio `task`. If it is unable to enter the semaphore, and hence the coroutine is never awaited and complains when garbage collected. This is a non-issue. If the timeout occurs after the coroutine has acquired the semaphore, this warning will not be seen.
+- Functions that call credit consuming functions should not be decorated with `@consume_credits` to avoid double counting.
 
-- The `transact` function only takes in coroutines, and not other `awaitable` objects. This is because our semaphore is not 'task-save', since `task` runs on iteration of the event loop while the desired behavior is only for the coroutine to be put on the event loop after acquiring the semaphore. 
+- For a timeout transaction that does not get a chance to run due to it sitting behind other transactions that are opportunistically processed, a `RuntimeWarning: Enable tracemalloc to get the object allocation traceback` may be seen together with the `asyncio.TimeoutError`. This is because the transact contains the coroutine, and the transact is wrapped in an asyncio `task`. If it is unable to enter the semaphore by timeout, the coroutine is never awaited and complains when garbage collected. This is a non-issue. If the timeout occurs after the coroutine has acquired the semaphore, this warning will not be seen but the `asyncio.TimeoutError` will still be thrown.
+
+- The `transact` function only takes in coroutines, and not other `awaitable` objects. This is because our semaphore is not `task`-safe, since `task` runs on iteration of the event loop while the desired behavior is only for the coroutine to be put on the event loop after acquiring the semaphore. 
 
 ## Happy Throttling!
