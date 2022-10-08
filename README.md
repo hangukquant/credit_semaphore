@@ -2,7 +2,7 @@
 Asynchronous Semaphore Based on Credits for Efficient Credit-Based API Throttling
 ========
 
-This library provides an asynchronous semaphore that generalizes the asyncio semaphore to handle rate limiting using a credit based system. A common use case is in API throttling.
+This library provides an asynchronous semaphore that generalizes the asyncio semaphore to handle rate limiting using a credit based system. A common use case is in API throttling, such as APIs that allow access limits up to '1000 requests / min' or '200 cpu credits / sec' and so on.
 
 Usage
 -----
@@ -227,5 +227,15 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+
+Notes & Best Practices
+-----
+- Wrap unstable networks and expensive tasks in a timeout transaction. This is to prevent the coroutine from `await'-ing forever.
+
+- Since the transaction does not know when the coroutine actually performs the credit-costing request, the coroutine passed in to the `transact` function or decorated with the `@consume_credits` should be closest to the costful logic as possible. It should not perform heavy compute or multiple requests so that the credits can refunded as quickly as possible for efficiency. Functions that call credit consuming functions should not be decorated with `@consume_credits` to avoid double counting.
+
+- For a timeout transaction that does not get a chance to run due to it sitting behind other transactions that are opportunistically processed, a `RuntimeWarning: Enable tracemalloc to get the object allocation traceback` may be seen together with the `asyncio.TimeoutError`. This is because the transact contains the coroutine, and the transact is wrapped in an asyncio `task`. If it is unable to enter the semaphore, and hence the coroutine is never awaited and complains when garbage collected. This is a non-issue. If the timeout occurs after the coroutine has acquired the semaphore, this warning will not be seen.
+
+- The `transact` function only takes in coroutines, and not other `awaitable` objects. This is because our semaphore is not 'task-save', since `task` runs on iteration of the event loop while the desired behavior is only for the coroutine to be put on the event loop after acquiring the semaphore. 
 
 ## Happy Throttling!
